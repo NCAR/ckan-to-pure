@@ -39,7 +39,7 @@ Program Version: '''
 #
 programHelp = PROGRAM_DESCRIPTION + __version__
 parser = argparse.ArgumentParser(description=programHelp)
-parser.add_argument("--ckan-url", nargs=1, help="CKAN base URL", default='https://data.ucar.edu')
+parser.add_argument("--ckan-url", nargs=1, help="CKAN base URL", default=['https://data.ucar.edu'])
 parser.add_argument("--test", help="Produce output for at most ten datasets", action='store_const', const=True)
 parser.add_argument("--use-namespaces", help="Add qualified namespaces to elements", action='store_const', const=True)
 parser.add_argument("--validate", help="Perform XSD validation; use with --use-namespaces.",
@@ -49,7 +49,7 @@ parser.add_argument('--version', action='version', version="%(prog)s (" + __vers
 
 args = parser.parse_args()
 
-CKAN_URL = args.ckan_url
+CKAN_URL = args.ckan_url[0]
 TEST_OUTPUT = args.test
 USE_NAMESPACES = args.use_namespaces
 VALIDATE_XML = args.validate
