@@ -1,6 +1,7 @@
 import json
 import sys
 from datetime import datetime
+import pathlib
 
 from lxml import etree
 
@@ -34,7 +35,8 @@ def write_xml(root, output_file=None):
 
 
 def validate_xml(root):
-    schema_file = './PURE_XSD/dataset.xsd'
+    current_directory = pathlib.Path(__file__).parent.absolute().as_posix()
+    schema_file = current_directory + '/PURE_XSD/dataset.xsd'
     xmlschema_doc = etree.parse(schema_file)
     xmlschema = etree.XMLSchema(xmlschema_doc)
     xmlschema.assertValid(root)
