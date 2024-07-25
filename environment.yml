@@ -1,0 +1,6 @@
+name: ckan-to-pure
+channels:
+- conda-forge
+dependencies:
+- urllib3
+- lxml >= 4.2.1
