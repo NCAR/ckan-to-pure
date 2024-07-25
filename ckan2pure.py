@@ -25,7 +25,7 @@ Optional arguments:
 
        --ckan-url         Base URL for CKAN repository; default is "https://data.ucar.edu"
        --test             Generate output for the first ten datasets only
-       --use-namespaces   Use qualified namespaces.  Should be selected if --validate is selected,
+       --use-namespaces   Use qualified namespaces.  Should be selected if --validate is selected.
        --validate         Perform XSD schema validation on the XML output
        --add-extra        Add extra concepts from the Pure Schema to XML output
        
