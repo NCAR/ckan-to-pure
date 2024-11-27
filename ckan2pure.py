@@ -59,30 +59,42 @@ ADD_EXTRA_CONCEPTS = args.add_extra
 start_time = time.time()
 
 # URL for getting the list of package names
-packages = CKAN_URL + '/api/3/action/package_list'
+package_search_query = CKAN_URL + '/api/3/action/package_search?fq=resource-type:dataset'
 
-with urlopen(packages) as url:
+with urlopen(package_search_query) as url:
     response = url.read()
 
 json_data = json.loads(response.decode('utf-8'))
 
-datasets = json_data['result']  # extract all the packages from the response
-print_stderr(len(datasets))
+num_datasets = json_data['result']['count']
+#datasets = json_data['result']['results']  # extract all the packages from the response
+print_stderr(num_datasets)
 
+max_rows = 500
 if TEST_OUTPUT:
-    num_datasets = min(10, len(datasets))
-    datasets = datasets[:num_datasets]
+    start = num_datasets - 10
+else:
+    start = 0
+    # num_datasets = min(10, len(datasets))
+    # datasets = datasets[:num_datasets]
 
 root = xml_init(USE_NAMESPACES)
 
-for dataset_name in datasets:
-    package_get = CKAN_URL + '/api/3/action/package_show?id=' + dataset_name
-    with urlopen(package_get) as url:
+while start < num_datasets:
+    query = package_search_query + f'&start={start}&rows={max_rows}'
+    with urlopen(query) as url:
         response = url.read()
     json_data = json.loads(response.decode('utf-8'))
-    pkg_dict = json_data['result']
-    print_stderr(pkg_dict['title'])
-    render_package(root, pkg_dict, ADD_EXTRA_CONCEPTS)
+    datasets = json_data['result']['results']  # extract all the packages from the response
+    for pkg_dict in datasets:
+        # package_get = CKAN_URL + '/api/3/action/package_show?id=' + dataset_name
+        # with urlopen(package_get) as url:
+        #     response = url.read()
+        # json_data = json.loads(response.decode('utf-8'))
+        # pkg_dict = json_data['result']
+        print_stderr(pkg_dict['title'])
+        render_package(root, pkg_dict, ADD_EXTRA_CONCEPTS)
+    start = start + max_rows
 
 write_xml(root)
 
