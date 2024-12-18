@@ -13,6 +13,36 @@ PURE_CMNS = "v3.commons.pure.atira.dk"
 CMNS = "{%s}" % PURE_CMNS
 
 
+NCAR_WORKDAY_MAPPING = {
+    'ACOM': "b8854078213e01cfb456b76356059399",
+    'CGD': "b8854078213e01644877b46356058399",
+    'CISL': "b8854078213e018ebaf5b16356057499",
+    'RDA': "b8854078213e01adb049ba635605a399",       # Map to CISL-ISD
+    'GDEX': "b8854078213e01adb049ba635605a399",      # Map to CISL-ISD
+    'EOL': "b8854078213e010cab96c0635605ce99",
+    'HAO': "b8854078213e01f8bae5bc635605b399",
+    'Library': "b8854078213e01449174579656051bc0",
+    'RAL': "b8854078213e012295b7b66356058f99",
+    'UCP': "b8854078213e01213fc1bb635605ab99",
+    'NCAR': "b8854078213e01359df4bf635605ca99",      # Always place at the end of this list
+}
+
+def get_organization_id(org_string):
+    """
+    Given a string representing an NCAR organization, find the first mapping entry with a partial match and
+    return the associated UUID from Workday.   If there is no partial match, return None.
+    
+    The partial string match test is case-sensitive.
+    """
+    workday_id = None
+    for key, value in NCAR_WORKDAY_MAPPING.items():
+        if key in org_string:
+            workday_id = value
+    return workday_id
+
+
+
+
 def print_stderr(msg):
     print(msg, file=sys.stderr)
 
@@ -101,6 +131,7 @@ def get_extent_parts(extent):
 
 
 def render_package(root, pkg_dict, add_extra_elements=False):
+    assert(pkg_dict['type'] == 'dataset')
     # Filter out non-dataset, non-active packages
     if pkg_dict['type'] != 'dataset' or pkg_dict['state'] != 'active':
         return
