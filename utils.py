@@ -1,7 +1,9 @@
 import json
 import sys
+import time
 from datetime import datetime
 import pathlib
+from urllib.request import urlopen
 
 from lxml import etree
 
@@ -22,10 +24,49 @@ NCAR_WORKDAY_MAPPING = {
     'EOL': "b8854078213e010cab96c0635605ce99",
     'HAO': "b8854078213e01f8bae5bc635605b399",
     'Library': "b8854078213e01449174579656051bc0",
+    'NCAR Library': "b8854078213e01449174579656051bc0",
     'RAL': "b8854078213e012295b7b66356058f99",
     'UCP': "b8854078213e01213fc1bb635605ab99",
     'NCAR': "b8854078213e01359df4bf635605ca99",      # Always place at the end of this list
 }
+
+#  Mapping from DASH Search names to Pure API names.
+PURE_NAME_MAPPINGS = {
+    'GDEX': "ISD",
+    'RDA': "ISD",
+    'Library': "NCARLIB",
+}
+
+PURE_ORG_MAPPING = {}
+
+def get_pure_organization(org_key):
+    """
+    Given an organization string, return the Pure API mapping for this organization'd id.
+    If the string includes 'RDA' or 'GDEX', then map to the CISL/ISD section.
+    """
+    organisation_id = None
+    for key, value in PURE_NAME_MAPPINGS.items():
+        if key in org_key:
+            org_key = value
+            break
+
+    for key, value in PURE_ORG_MAPPING.items():
+        if org_key == key:
+            organisation_id = value
+            break
+
+    if not organisation_id:
+        query = 'https://impacts.dev.nrit.ucar.edu/api/organisations/' + org_key
+        with urlopen(query) as url:
+            response = url.read()
+        json_data = json.loads(response.decode('utf-8'))
+        if json_data:
+            organisation_id = json_data['organisationId']
+            PURE_ORG_MAPPING[org_key] = organisation_id
+        else:
+            print_stderr(f'\n\n  #### Could not find organization match for {org_key}')
+            time.sleep(2.0)
+    return organisation_id
 
 def get_organization_id(org_string):
     """
@@ -35,9 +76,17 @@ def get_organization_id(org_string):
     The partial string match test is case-sensitive.
     """
     workday_id = None
+    workday_key = None
     for key, value in NCAR_WORKDAY_MAPPING.items():
         if key in org_string:
+            workday_key = key
             workday_id = value
+            break
+
+    # Confirm that the organization ID is the same as in Pure, if it is found.
+    if workday_key:
+        pure_org_id = get_pure_organization(workday_key)
+        assert(workday_id == pure_org_id)
     return workday_id
 
 
@@ -131,9 +180,35 @@ def get_extent_parts(extent):
 
 
 def render_package(root, pkg_dict, add_extra_elements=False):
+    """
+    Render the metadata for a single dataset to the Pure XML feed.
+    """
     assert(pkg_dict['type'] == 'dataset')
-    # Filter out non-dataset, non-active packages
-    if pkg_dict['type'] != 'dataset' or pkg_dict['state'] != 'active':
+    assert(pkg_dict['state'] == 'active')
+
+    ### For the dataset to be valid in Pure, it must have a Workday mapping for Managing Organization and Publisher.
+
+    # Managing Organization
+    # managing_org = get_extras_value(pkg_dict, 'resource-support-organization')
+    # if not managing_org:
+    # managing_org = get_extras_value(pkg_dict, 'metadata-support-organization')
+    # if not managing_org:
+    managing_org = pkg_dict['organization']['title']
+    managing_org_id = get_organization_id(managing_org)
+
+    # Publisher: Pure accepts only one publisher, so use the first one.
+    publishers_json = get_extras_value(pkg_dict, 'publisher-standard')
+    publishers = json.loads(publishers_json)
+    publisher_id = None
+    for publisher in publishers:
+        publisher_id = get_organization_id(publisher)
+        if publisher_id:
+            break
+
+    # Filter out cases that have missing Workday mappings
+    if not (managing_org_id and publisher_id):
+        message = f"#### Filtering out '{pkg_dict['title']}' with managing org {managing_org} and publisher(s) {publishers}"
+        print_stderr(message)
         return
 
     # log.error(pkg_dict)
@@ -188,18 +263,8 @@ def render_package(root, pkg_dict, add_extra_elements=False):
     avail_date = etree.SubElement(dataset, PURE + 'availableDate')
     fill_date_fields(avail_date, date_parts)
 
-    # Managing Organization
-    managing_org = get_extras_value(pkg_dict, 'resource-support-organization')
-    if not managing_org:
-        managing_org = get_extras_value(pkg_dict, 'metadata-support-organization')
-    if not managing_org:
-        managing_org = pkg_dict['organization']['title']
-    org = etree.SubElement(dataset, PURE + 'managingOrganisation', attrib={'lookupId': managing_org})
-
-    # Publisher: Pure accepts only one publisher, so use the first one.
-    publishers = get_extras_value(pkg_dict, 'publisher-standard')
-    publisher = json.loads(publishers)[0]
-    org = etree.SubElement(dataset, PURE + 'publisher', attrib={'lookupId': publisher})
+    org = etree.SubElement(dataset, PURE + 'managingOrganisation', attrib={'lookupId': managing_org_id})
+    org = etree.SubElement(dataset, PURE + 'publisher', attrib={'lookupId': publisher_id})
 
     # Link to resource homepage
     if add_extra_elements:
