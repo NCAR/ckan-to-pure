@@ -2,11 +2,11 @@ import argparse
 from urllib.request import urlopen
 import json
 import time
-import sys
+#import sys
 
 from utils import render_package, xml_init, write_xml, validate_xml, print_stderr
 
-__version_info__ = ('2024', '07', '25')
+__version_info__ = ('2025', '11', '12')
 __version__ = '-'.join(__version_info__)
 
 PROGRAM_DESCRIPTION = '''
@@ -20,6 +20,11 @@ Tested with python 3.8.
 Example usage:
 
        python ckan2pure.py --ckan-url https://data.ucar.edu > pure.xml
+       
+Required arguments:
+
+       --username         Username for Pure support servers
+       --password         Password for Pure support servers
        
 Optional arguments:
 
@@ -39,6 +44,9 @@ Program Version: '''
 #
 programHelp = PROGRAM_DESCRIPTION + __version__
 parser = argparse.ArgumentParser(description=programHelp)
+parser.add_argument("--username", nargs=1, required=True, help="Username for Pure support servers")
+parser.add_argument("--password", nargs=1, required=True, help="Password for Pure support servers")
+
 parser.add_argument("--ckan-url", nargs=1, help="CKAN base URL", default=['https://data.ucar.edu'])
 parser.add_argument("--test", help="Produce output for at most ten datasets", action='store_const', const=True)
 parser.add_argument("--use-namespaces", help="Add qualified namespaces to elements", action='store_const', const=True)
