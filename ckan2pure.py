@@ -4,6 +4,7 @@ import json
 import time
 #import sys
 
+from pure_parse import urlopen_with_basic_auth
 from utils import render_package, xml_init, write_xml, validate_xml, print_stderr
 
 __version_info__ = ('2025', '11', '12')
@@ -44,8 +45,8 @@ Program Version: '''
 #
 programHelp = PROGRAM_DESCRIPTION + __version__
 parser = argparse.ArgumentParser(description=programHelp)
-parser.add_argument("--username", nargs=1, required=True, help="Username for Pure support servers")
-parser.add_argument("--password", nargs=1, required=True, help="Password for Pure support servers")
+#parser.add_argument("--username", nargs=1, required=True, help="Username for Pure support servers")
+#parser.add_argument("--password", nargs=1, required=True, help="Password for Pure support servers")
 
 parser.add_argument("--ckan-url", nargs=1, help="CKAN base URL", default=['https://data.ucar.edu'])
 parser.add_argument("--test", help="Produce output for at most ten datasets", action='store_const', const=True)
@@ -65,6 +66,26 @@ ADD_EXTRA_CONCEPTS = args.add_extra
 
 # Time the program's run length
 start_time = time.time()
+
+# Get PURE XML feed data
+auth_file = '.auth_tokens'
+with open (auth_file) as f:
+    URL = f.readline().strip()
+    username = f.readline().strip()
+    password = f.readline().strip()
+
+
+persons = urlopen_with_basic_auth(URL + 'persons', username, password)
+persons = persons.read().decode('utf-8')
+users = urlopen_with_basic_auth(URL + 'users', username, password)
+users = users.read().decode('utf-8')
+
+
+# Write persons to temporary file
+with open("/tmp/persons.txt", 'w') as file:
+    file.write(persons)
+with open("/tmp/users.txt", 'w') as file:
+    file.write(users)
 
 # URL for getting the list of package names
 package_search_query = CKAN_URL + '/api/3/action/package_search?fq=resource-type:dataset'

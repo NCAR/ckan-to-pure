@@ -3,10 +3,13 @@ import sys
 import time
 from datetime import datetime
 import pathlib
-from urllib.request import urlopen
+import re
+
+
+# from urllib.request import urlopen
 
 from lxml import etree
-
+from pure_parse import populate_workday_mapping
 
 PURE_NS = "v1.dataset.pure.atira.dk"
 PURE = "{%s}" % PURE_NS
@@ -15,58 +18,9 @@ PURE_CMNS = "v3.commons.pure.atira.dk"
 CMNS = "{%s}" % PURE_CMNS
 
 
-NCAR_WORKDAY_MAPPING = {
-    'ACOM': "b8854078213e01cfb456b76356059399",
-    'CGD': "b8854078213e01644877b46356058399",
-    'CISL': "b8854078213e018ebaf5b16356057499",
-    'RDA': "b8854078213e01adb049ba635605a399",       # Map to CISL-ISD
-    'GDEX': "b8854078213e01adb049ba635605a399",      # Map to CISL-ISD
-    'EOL': "b8854078213e010cab96c0635605ce99",
-    'HAO': "b8854078213e01f8bae5bc635605b399",
-    'Library': "b8854078213e01449174579656051bc0",
-    'NCAR Library': "b8854078213e01449174579656051bc0",
-    'RAL': "b8854078213e012295b7b66356058f99",
-    'UCP': "b8854078213e01213fc1bb635605ab99",
-    'NCAR': "b8854078213e01359df4bf635605ca99",      # Always place at the end of this list
-}
+# This gets populated with Pure API queries
+NCAR_WORKDAY_MAPPING = {}
 
-#  Mapping from DASH Search names to Pure API names.
-PURE_NAME_MAPPINGS = {
-    'GDEX': "ISD",
-    'RDA': "ISD",
-    'Library': "NCARLIB",
-}
-
-PURE_ORG_MAPPING = {}
-
-def get_pure_organization(org_key):
-    """
-    Given an organization string, return the Pure API mapping for this organization'd id.
-    If the string includes 'RDA' or 'GDEX', then map to the CISL/ISD section.
-    """
-    organisation_id = None
-    for key, value in PURE_NAME_MAPPINGS.items():
-        if key in org_key:
-            org_key = value
-            break
-
-    for key, value in PURE_ORG_MAPPING.items():
-        if org_key == key:
-            organisation_id = value
-            break
-
-    if not organisation_id:
-        query = 'https://impacts.dev.nrit.ucar.edu/api/organisations/' + org_key
-        with urlopen(query) as url:
-            response = url.read()
-        json_data = json.loads(response.decode('utf-8'))
-        if json_data:
-            organisation_id = json_data['organisationId']
-            PURE_ORG_MAPPING[org_key] = organisation_id
-        else:
-            print_stderr(f'\n\n  #### Could not find organization match for {org_key}')
-            time.sleep(2.0)
-    return organisation_id
 
 def get_organization_id(org_string):
     """
@@ -75,6 +29,9 @@ def get_organization_id(org_string):
     
     The partial string match test is case-sensitive.
     """
+    global NCAR_WORKDAY_MAPPING
+    if not NCAR_WORKDAY_MAPPING:
+        NCAR_WORKDAY_MAPPING = populate_workday_mapping()
     workday_id = None
     workday_key = None
     for key, value in NCAR_WORKDAY_MAPPING.items():
@@ -82,14 +39,7 @@ def get_organization_id(org_string):
             workday_key = key
             workday_id = value
             break
-
-    # Confirm that the organization ID is the same as in Pure, if it is found.
-    if workday_key:
-        pure_org_id = get_pure_organization(workday_key)
-        assert(workday_id == pure_org_id)
     return workday_id
-
-
 
 
 def print_stderr(msg):
@@ -179,6 +129,11 @@ def get_extent_parts(extent):
     return (start_date, end_date)
 
 
+def remove_html_tags(text):
+    """Remove HTML tags from a string using regex."""
+    clean = re.compile('<.*?>') # The '?' makes the match non-greedy
+    return re.sub(clean, '', text)
+
 def render_package(root, pkg_dict, add_extra_elements=False):
     """
     Render the metadata for a single dataset to the Pure XML feed.
@@ -220,7 +175,7 @@ def render_package(root, pkg_dict, add_extra_elements=False):
 
     # Description
     description = etree.SubElement(dataset, PURE + 'description')
-    description.text = pkg_dict['notes']
+    description.text = remove_html_tags(pkg_dict['notes'])
 
     # Temporal Coverage:  Use only if it's defined
     if add_extra_elements:
