@@ -5,9 +5,6 @@ from datetime import datetime
 import pathlib
 import re
 
-
-# from urllib.request import urlopen
-
 from lxml import etree
 from pure_parse import populate_workday_mapping
 
@@ -18,8 +15,25 @@ PURE_CMNS = "v3.commons.pure.atira.dk"
 CMNS = "{%s}" % PURE_CMNS
 
 
-# This gets populated with Pure API queries
-NCAR_WORKDAY_MAPPING = {}
+# Organization IDs get populated with Pure API queries
+WORKDAY_ORG_MAPPING = {}
+
+# Publishers are hard-coded strings
+PUBLISHER_MAPPING = {
+    'ACOM': "ucarncar-publisher-acom",
+    'CGD': "ucarncar-publisher-cgd",
+    'CISL': "ucarncar-publisher-cisl",
+    'RDA': "ucarncar-publisher-cisl-isd",  # Map to CISL-ISD
+    'GDEX': "ucarncar-publisher-cisl-isd",  # Map to CISL-ISD
+    'EOL': "ucarncar-publisher-eol",
+    'HAO': "ucarncar-publisher-hao",
+    'Library': "ucarncar-publisher-ncar-library",
+    'RAL': "ucarncar-publisher-ral",
+    'UCP': "ucarncar-publisher-ucp",
+    'NCAR': "ucarncar-publisher-ncar",  # Always place at the end of this list
+}
+
+
 
 
 def get_organization_id(org_string):
@@ -29,14 +43,12 @@ def get_organization_id(org_string):
     
     The partial string match test is case-sensitive.
     """
-    global NCAR_WORKDAY_MAPPING
-    if not NCAR_WORKDAY_MAPPING:
-        NCAR_WORKDAY_MAPPING = populate_workday_mapping()
+    global WORKDAY_ORG_MAPPING
+    if not WORKDAY_ORG_MAPPING:
+        WORKDAY_ORG_MAPPING = populate_workday_mapping()
     workday_id = None
-    workday_key = None
-    for key, value in NCAR_WORKDAY_MAPPING.items():
+    for key, value in WORKDAY_ORG_MAPPING.items():
         if key in org_string:
-            workday_key = key
             workday_id = value
             break
     return workday_id
@@ -152,17 +164,20 @@ def render_package(root, pkg_dict, add_extra_elements=False):
     managing_org_id = get_organization_id(managing_org)
 
     # Publisher: Pure accepts only one publisher, so use the first one.
-    publishers_json = get_extras_value(pkg_dict, 'publisher-standard')
-    publishers = json.loads(publishers_json)
+    publishers_standard_json = get_extras_value(pkg_dict, 'publisher-standard')
+    publishers_standard = json.loads(publishers_standard_json)
     publisher_id = None
-    for publisher in publishers:
+    for publisher in publishers_standard:
         publisher_id = get_organization_id(publisher)
         if publisher_id:
             break
 
+    if managing_org != publisher:
+        print_stderr(f"managing_org == {managing_org},  publisher == {publisher}")
+
     # Filter out cases that have missing Workday mappings
     if not (managing_org_id and publisher_id):
-        message = f"#### Filtering out '{pkg_dict['title']}' with managing org {managing_org} and publisher(s) {publishers}"
+        message = f"#### Filtering out '{pkg_dict['title']}' with managing org {managing_org} and publisher(s) {publishers_standard}"
         print_stderr(message)
         return
 
