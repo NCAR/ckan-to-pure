@@ -6,7 +6,7 @@ import pathlib
 import re
 
 from lxml import etree
-from pure_parse import populate_workday_mapping
+from pure_parse import populate_workday_mapping, get_pure_author_id
 
 PURE_NS = "v1.dataset.pure.atira.dk"
 PURE = "{%s}" % PURE_NS
@@ -34,13 +34,11 @@ PUBLISHER_MAPPING = {
 }
 
 
-
-
 def get_organization_id(org_string):
     """
     Given a string representing an NCAR organization, find the first mapping entry with a partial match and
     return the associated UUID from Workday.   If there is no partial match, return None.
-    
+
     The partial string match test is case-sensitive.
     """
     global WORKDAY_ORG_MAPPING
@@ -54,15 +52,30 @@ def get_organization_id(org_string):
     return workday_id
 
 
+def get_publisher_string(org_string):
+    """
+    Given a string representing an NCAR organization, find the first PUBLISHER_MAPPING entry with a partial match and
+    return the associated UUID from Workday.   If there is no partial match, return None.
+
+    The partial string match test is case-sensitive.
+    """
+    publisher_string = None
+    for key, value in PUBLISHER_MAPPING.items():
+        if key in org_string:
+            publisher_string = value
+            break
+    return publisher_string
+
+
 def print_stderr(msg):
     print(msg, file=sys.stderr)
 
 def xml_init(use_namespaces):
     if use_namespaces:
-        rootElement = etree.Element(PURE + "datasets", nsmap={'v1': PURE_NS, 'v3': PURE_CMNS})
+        root_element = etree.Element(PURE + "datasets", nsmap={'v1': PURE_NS, 'v3': PURE_CMNS})
     else:
-        rootElement = etree.Element(PURE + "datasets", nsmap={None: PURE_NS, 'v3': PURE_CMNS})
-    return rootElement
+        root_element = etree.Element(PURE + "datasets", nsmap={None: PURE_NS, 'v3': PURE_CMNS})
+    return root_element
 
 
 def write_xml(root, output_file=None):
@@ -115,8 +128,8 @@ def is_doi(url_string):
     return return_value
 
 
-def get_doi_suffix(urlString):
-    suffix = urlString.split('doi.org/', 1)[1]
+def get_doi_suffix(url_string):
+    suffix = url_string.split('doi.org/', 1)[1]
     return suffix
 
 
@@ -138,13 +151,14 @@ def get_extent_parts(extent):
         end_date = date.split('-')
     else:
         end_date = dates[1].split('-')
-    return (start_date, end_date)
+    return start_date, end_date
 
 
 def remove_html_tags(text):
     """Remove HTML tags from a string using regex."""
     clean = re.compile('<.*?>') # The '?' makes the match non-greedy
     return re.sub(clean, '', text)
+
 
 def render_package(root, pkg_dict, add_extra_elements=False):
     """
@@ -155,34 +169,29 @@ def render_package(root, pkg_dict, add_extra_elements=False):
 
     ### For the dataset to be valid in Pure, it must have a Workday mapping for Managing Organization and Publisher.
 
-    # Managing Organization
-    # managing_org = get_extras_value(pkg_dict, 'resource-support-organization')
-    # if not managing_org:
-    # managing_org = get_extras_value(pkg_dict, 'metadata-support-organization')
-    # if not managing_org:
-    managing_org = pkg_dict['organization']['title']
-    managing_org_id = get_organization_id(managing_org)
-
     # Publisher: Pure accepts only one publisher, so use the first one.
     publishers_standard_json = get_extras_value(pkg_dict, 'publisher-standard')
     publishers_standard = json.loads(publishers_standard_json)
+    publishers_json = get_extras_value(pkg_dict, 'publisher')
+    publishers = json.loads(publishers_json)
     publisher_id = None
-    for publisher in publishers_standard:
-        publisher_id = get_organization_id(publisher)
+    publisher_standard = None
+    for publisher_standard, publisher in zip(publishers_standard, publishers):
+        publisher_id = get_organization_id(publisher_standard)
         if publisher_id:
             break
 
-    if managing_org != publisher:
-        print_stderr(f"managing_org == {managing_org},  publisher == {publisher}")
 
     # Filter out cases that have missing Workday mappings
-    if not (managing_org_id and publisher_id):
-        message = f"#### Filtering out '{pkg_dict['title']}' with managing org {managing_org} and publisher(s) {publishers_standard}"
+    if not publisher_id:
+        message = f"#### Filtering out '{pkg_dict['title']}' with publisher(s) {publishers}"
         print_stderr(message)
         return
 
+    publisher_string = get_publisher_string(publisher_standard)
+
     # log.error(pkg_dict)
-    dataset = etree.SubElement(root, PURE + 'dataset', attrib={'id': pkg_dict['id'], 'type': 'dataset'})
+    dataset = etree.Element(PURE + 'dataset', attrib={'id': pkg_dict['id'], 'type': 'dataset'})
 
     # Title
     title = etree.SubElement(dataset, PURE + 'title')
@@ -196,30 +205,15 @@ def render_package(root, pkg_dict, add_extra_elements=False):
     if add_extra_elements:
         extent_range = get_extras_value(pkg_dict, 'extent_range')
         if extent_range:
-            (startDate, endDate) = get_extent_parts(extent_range)
+            (start_date, end_date) = get_extent_parts(extent_range)
             temporal_coverage = etree.SubElement(dataset, PURE + 'temporalCoverage')
             start = etree.SubElement(temporal_coverage, PURE + 'from')
-            fill_date_fields(start, startDate)
+            fill_date_fields(start, start_date)
             end = etree.SubElement(temporal_coverage, PURE + 'to')
-            fill_date_fields(end, endDate)
+            fill_date_fields(end, end_date)
 
     # Geolocation:  We have to specify a polygon in Google Maps format.
     # Example would be nice; punt for now.
-
-    # Persons: For now, we just populate with authors.
-    if add_extra_elements:
-        authors = get_extras_value(pkg_dict, 'harvest-author')
-        authors = json.loads(authors)
-        persons = etree.SubElement(dataset, PURE + 'persons')
-        for author in authors:
-            person = etree.SubElement(persons, PURE + 'person', attrib={"id": author})
-            person_inner = etree.SubElement(person, PURE + 'person', attrib={"lookupId": author})
-            # As a first pass, we put the entire author name into the "firstName" field.
-            # personParts = getPersonParts(author)
-            first_name = etree.SubElement(person_inner, PURE + 'firstName')
-            first_name.text = author
-            role = etree.SubElement(person, PURE + 'role')
-            role.text = 'creator'
 
     # DOI
     resource_url = get_extras_value(pkg_dict, 'resource-url')
@@ -233,8 +227,34 @@ def render_package(root, pkg_dict, add_extra_elements=False):
     avail_date = etree.SubElement(dataset, PURE + 'availableDate')
     fill_date_fields(avail_date, date_parts)
 
-    org = etree.SubElement(dataset, PURE + 'managingOrganisation', attrib={'lookupId': managing_org_id})
-    org = etree.SubElement(dataset, PURE + 'publisher', attrib={'lookupId': publisher_id})
+    # Persons: For now, we just populate with authors.
+    authors = get_extras_value(pkg_dict, 'harvest-author-orcid')
+    authors = json.loads(authors)
+    persons = etree.SubElement(dataset, PURE + 'persons')
+    author_index = 0
+    matched_author = False
+    for author in authors:
+        author_index += 1
+        person_id = get_pure_author_id(author)
+        if not person_id:
+            print_stderr(f"Could not find person ID for {author}, skipping...")
+            continue
+        else:
+            matched_author = True
+        person = etree.SubElement(persons, PURE + 'person', attrib={"id": "personAssoc" + str(author_index), "contactPerson": "false"})
+        person_inner = etree.SubElement(person, PURE + 'person', attrib={"lookupId": person_id})
+        role = etree.SubElement(person_inner, PURE + 'role')
+        role.text = 'creator'
+
+    if not matched_author:
+        print_stderr(f"Could not find a matching author for {pkg_dict['title']} with publisher(s) {publishers}, skipping...")
+        return
+
+    org = etree.SubElement(dataset, PURE + 'managingOrganisation', attrib={'lookupId': publisher_id})
+    org = etree.SubElement(dataset, PURE + 'publisher', attrib={'lookupId': publisher_string})
+
+    # Now that the dataset element is complete, append it to the output XML feed.
+    root.append(dataset)
 
     # Link to resource homepage
     if add_extra_elements:
