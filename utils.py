@@ -78,8 +78,10 @@ def xml_init(use_namespaces):
     return root_element
 
 
-def write_xml(root, output_file=None):
+def write_xml(root, xml_header=None, output_file=None):
     content = etree.tostring(root, pretty_print=True, encoding='unicode')
+    if xml_header:
+        content = xml_header + content
     if not output_file:
         sys.stdout.write(content)
     else:
@@ -229,6 +231,9 @@ def render_package(root, pkg_dict, add_extra_elements=False):
 
     # Persons: For now, we just populate with authors.
     authors = get_extras_value(pkg_dict, 'harvest-author-orcid')
+    if not authors:
+        print_stderr("#### No authors found, skipping...")
+        return
     authors = json.loads(authors)
     persons = etree.SubElement(dataset, PURE + 'persons')
     author_index = 0

@@ -105,7 +105,8 @@ while start < num_datasets:
         render_package(root, pkg_dict, ADD_EXTRA_CONCEPTS)
     start = start + max_rows
 
-write_xml(root)
+xml_header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+write_xml(root, xml_header)
 
 if VALIDATE_XML:
     validate_xml(root)
