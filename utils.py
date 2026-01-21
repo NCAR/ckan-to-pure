@@ -248,7 +248,7 @@ def render_package(root, pkg_dict, add_extra_elements=False):
             matched_author = True
         person = etree.SubElement(persons, PURE + 'person', attrib={"id": "personAssoc" + str(author_index), "contactPerson": "false"})
         person_inner = etree.SubElement(person, PURE + 'person', attrib={"lookupId": person_id})
-        role = etree.SubElement(person_inner, PURE + 'role')
+        role = etree.SubElement(person, PURE + 'role')
         role.text = 'creator'
 
     if not matched_author:
