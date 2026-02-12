@@ -193,7 +193,8 @@ def render_package(root, pkg_dict, add_extra_elements=False):
     publisher_string = get_publisher_string(publisher_standard)
 
     # log.error(pkg_dict)
-    dataset = etree.Element(PURE + 'dataset', attrib={'id': pkg_dict['id'], 'type': 'dataset'})
+    dataset_id = get_extras_value(pkg_dict, 'guid')
+    dataset = etree.Element(PURE + 'dataset', attrib={'id': dataset_id, 'type': 'dataset'})
 
     # Title
     title = etree.SubElement(dataset, PURE + 'title')
