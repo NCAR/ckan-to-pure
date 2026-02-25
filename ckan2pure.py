@@ -2,7 +2,7 @@ import argparse
 from urllib.request import urlopen
 import json
 import time
-#import sys
+import csv
 
 from pure_parse import urlopen_with_basic_auth
 from utils import render_package, xml_init, write_xml, validate_xml, print_stderr
@@ -54,6 +54,7 @@ parser.add_argument("--use-namespaces", help="Add qualified namespaces to elemen
 parser.add_argument("--validate", help="Perform XSD validation; use with --use-namespaces.",
                     action='store_const', const=True)
 parser.add_argument("--add-extra", help="Add extra Pure concepts", action='store_const', const=True)
+parser.add_argument("--orcid-doi-map", help="Write CSV file with ORCIDs and DOIs", action='store_const', const=True)
 parser.add_argument('--version', action='version', version="%(prog)s (" + __version__ + ")")
 
 args = parser.parse_args()
@@ -63,9 +64,18 @@ TEST_OUTPUT = args.test
 USE_NAMESPACES = args.use_namespaces
 VALIDATE_XML = args.validate
 ADD_EXTRA_CONCEPTS = args.add_extra
+ORCID_DOI_MAP = args.orcid_doi_map
 
 # Time the program's run length
 start_time = time.time()
+
+csvfile=None
+csv_writer = None
+if ORCID_DOI_MAP:
+    fields = ['DOI', 'dataset_id', 'ORCID', 'name']
+    csvfile = open('orcid-doi.csv', 'w', newline='')
+    csv_writer = csv.DictWriter(csvfile, fieldnames=fields)
+
 
 # URL for getting the list of package names
 package_search_query = CKAN_URL + '/api/3/action/package_search?fq=resource-type:dataset'
@@ -102,8 +112,11 @@ while start < num_datasets:
         # json_data = json.loads(response.decode('utf-8'))
         # pkg_dict = json_data['result']
         print_stderr(pkg_dict['title'])
-        render_package(root, pkg_dict, ADD_EXTRA_CONCEPTS)
+        render_package(root, pkg_dict, csv_writer, ADD_EXTRA_CONCEPTS)
     start = start + max_rows
+
+if ORCID_DOI_MAP:
+    csvfile.close()
 
 xml_header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
 write_xml(root, xml_header)

@@ -141,14 +141,15 @@ PERSONS_XML_FEED = None
 
 def get_pure_author_id(author):
     """Given a list of author dictionaries with the fields 'name' and 'orcid', find the Workday IDs
-       using the PURE API.
+       using the PURE API.   Also return the ORCID id, or None if it is not found.
     """
     person_id = None
+    orcid_id = None
     orcid_xpath = ".//d:person/d:orcId"
 
     global PERSONS_XML_FEED
     if PERSONS_XML_FEED is None:
-        # Get PURE XML feed data
+        # Always get the latest Workday persons data
         auth_file = '.auth_tokens'
         with open(auth_file) as f:
             URL = f.readline().strip()
@@ -157,21 +158,24 @@ def get_pure_author_id(author):
         PERSONS_XML_FEED = urlopen_with_basic_auth(URL + 'persons', username, password)
         PERSONS_XML_FEED = PERSONS_XML_FEED.read()
 
-        # Create a local file with persons content
+        # Create a local file with persons content for debugging purposes
         if not os.path.exists("/tmp/persons.txt"):
             persons_text = PERSONS_XML_FEED.decode('utf-8')
             with open("/tmp/persons.txt", 'w') as file:
                 file.write(persons_text)
         PERSONS_XML_FEED = getXMLTree(PERSONS_XML_FEED)
 
-    if author['orcid']:
-        orcid_id = author['orcid'].split('/')[-1]
+    if author['orcid_url'] and 'orcid' in author['orcid_url']:
+        orcid_id = author['orcid_url'].split('/')[-1]
         xpath = f"{orcid_xpath}[text()=\"{orcid_id}\"]"
         matchingOrcidElements = PERSONS_XML_FEED.xpath(xpath, namespaces=PERSON_NAMESPACES)
         if matchingOrcidElements:
             personElement = matchingOrcidElements[0].getparent()
             person_id = personElement.get("id")
-            return person_id
+            return person_id, orcid_id
+        else:
+            # Library wants ORCID-to-dataset mappings for all available ORCID ids
+            return None, orcid_id
 
     # Try name matching if ORCID matching fails.
     first_name, last_name = split_name_string(author['name'])
@@ -187,4 +191,4 @@ def get_pure_author_id(author):
         personElement = matchingNameElements[0].getparent()
         person_id = personElement.get("id")
 
-    return person_id
+    return person_id, orcid_id

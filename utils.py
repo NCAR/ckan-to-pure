@@ -162,7 +162,7 @@ def remove_html_tags(text):
     return re.sub(clean, '', text)
 
 
-def render_package(root, pkg_dict, add_extra_elements=False):
+def render_package(root, pkg_dict, csv_writer, add_extra_elements=False):
     """
     Render the metadata for a single dataset to the Pure XML feed.
     """
@@ -231,7 +231,7 @@ def render_package(root, pkg_dict, add_extra_elements=False):
     fill_date_fields(avail_date, date_parts)
 
     # Persons: For now, we just populate with authors.
-    authors = get_extras_value(pkg_dict, 'harvest-author-orcid')
+    authors = get_extras_value(pkg_dict, 'harvest-author-with-url')
     if not authors:
         print_stderr("#### No authors found, skipping...")
         return
@@ -241,7 +241,11 @@ def render_package(root, pkg_dict, add_extra_elements=False):
     matched_author = False
     for author in authors:
         author_index += 1
-        person_id = get_pure_author_id(author)
+        person_id, orcid_id = get_pure_author_id(author)
+        if csv_writer and orcid_id:
+            data = {'DOI': resource_url, 'dataset_id': dataset_id, 'ORCID': orcid_id, 'name':  author['name']}
+            csv_writer.writerow(data)
+
         if not person_id:
             print_stderr(f"Could not find person ID for {author}, skipping...")
             continue
