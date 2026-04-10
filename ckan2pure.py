@@ -22,11 +22,8 @@ Example usage:
 
        python ckan2pure.py --ckan-url https://data.ucar.edu > pure.xml
        
-Required arguments:
+Required authentication method:   a two-line file named ".auth_tokens" with credentials for Pure support servers
 
-       --username         Username for Pure support servers
-       --password         Password for Pure support servers
-       
 Optional arguments:
 
        --ckan-url         Base URL for CKAN repository; default is "https://data.ucar.edu"
