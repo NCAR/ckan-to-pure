@@ -31,6 +31,7 @@ Optional arguments:
        --use-namespaces   Use qualified namespaces.  Should be selected if --validate is selected.
        --validate         Perform XSD schema validation on the XML output
        --add-extra        Add extra concepts from the Pure Schema to XML output
+       --orcid-doi-map    Write CSV file with ORCIDs and DOIs
        
        --version          Print the program version and exit.
 
