@@ -1,4 +1,5 @@
 import argparse
+import sys
 from urllib.request import urlopen
 import json
 import time
@@ -7,7 +8,7 @@ import csv
 from pure_parse import urlopen_with_basic_auth
 from utils import render_package, xml_init, write_xml, validate_xml, print_stderr
 
-__version_info__ = ('2025', '11', '12')
+__version_info__ = ('2026', '04', '27')
 __version__ = '-'.join(__version_info__)
 
 PROGRAM_DESCRIPTION = '''
@@ -34,15 +35,25 @@ Optional arguments:
        --orcid-doi-map    Write CSV file with ORCIDs and DOIs
        
        --version          Print the program version and exit.
+       -h, --help         Show this help message and exit
+
 
 Program Version: '''
+
+class PrintHelpOnErrorParser(argparse.ArgumentParser):
+    def error(self, message):
+        sys.stderr.write('error: %s\n' % message)
+        self.print_help()
+        sys.exit(2)
 
 
 #
 #  Parse the command line options.
 #
 programHelp = PROGRAM_DESCRIPTION + __version__
-parser = argparse.ArgumentParser(description=programHelp)
+#parser = argparse.ArgumentParser(description=programHelp)
+parser = PrintHelpOnErrorParser(description=programHelp, formatter_class=argparse.RawTextHelpFormatter)
+
 #parser.add_argument("--username", nargs=1, required=True, help="Username for Pure support servers")
 #parser.add_argument("--password", nargs=1, required=True, help="Password for Pure support servers")
 

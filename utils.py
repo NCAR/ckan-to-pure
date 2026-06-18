@@ -6,7 +6,7 @@ import pathlib
 import re
 
 from lxml import etree
-from pure_parse import populate_workday_mapping, get_pure_author_id
+from pure_parse import populate_workday_mapping, get_pure_author_id, split_name_string
 
 PURE_NS = "v1.dataset.pure.atira.dk"
 PURE = "{%s}" % PURE_NS
@@ -238,7 +238,7 @@ def render_package(root, pkg_dict, csv_writer, add_extra_elements=False):
     authors = json.loads(authors)
     persons = etree.SubElement(dataset, PURE + 'persons')
     author_index = 0
-    matched_author = False
+    found_ncar_author = False
     for author in authors:
         author_index += 1
         person_id, orcid_id = get_pure_author_id(author)
@@ -246,17 +246,29 @@ def render_package(root, pkg_dict, csv_writer, add_extra_elements=False):
             data = {'DOI': resource_url, 'dataset_id': dataset_id, 'ORCID': orcid_id, 'name':  author['name']}
             csv_writer.writerow(data)
 
-        if not person_id:
-            print_stderr(f"Could not find person ID for {author}, skipping...")
-            continue
-        else:
-            matched_author = True
         person = etree.SubElement(persons, PURE + 'person', attrib={"id": "personAssoc" + str(author_index), "contactPerson": "false"})
-        person_inner = etree.SubElement(person, PURE + 'person', attrib={"lookupId": person_id})
-        role = etree.SubElement(person, PURE + 'role')
-        role.text = 'creator'
+        if not person_id:
+            # non-NCAR author found; create "external author" XML structure
+            person_inner = etree.SubElement(person, PURE + 'person', attrib={"origin": "external"})
+            first_name, last_name = split_name_string(author['name'])
+            if first_name:
+                first_name_element = etree.SubElement(person_inner, 'firstName')
+                first_name_element.text = first_name
+            if last_name:
+                last_name_element = etree.SubElement(person_inner, 'lastName')
+                last_name_element.text = last_name
+            role_element = etree.SubElement(person, PURE + 'role')
+            role_element.text = 'contributor'
+            #print_stderr(f"Could not find person ID for {author}, skipping...")
+            #continue
+        else:
+            # NCAR author found; create "internal author" XML structure
+            found_ncar_author = True
+            person_inner = etree.SubElement(person, PURE + 'person', attrib={"lookupId": person_id})
+            role = etree.SubElement(person, PURE + 'role')
+            role.text = 'creator'
 
-    if not matched_author:
+    if not found_ncar_author:
         print_stderr(f"Could not find a matching author for {pkg_dict['title']} with publisher(s) {publishers}, skipping...")
         return
 

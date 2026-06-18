@@ -111,6 +111,7 @@ def is_middle_initial(word_string):
     is_mi = len(word_string) == 2 and word_string[-1] == '.'
     return is_mi
 
+
 def split_name_string(name_string):
     """
     This function takes a person's full name, and if it has one whitespace separating two words and no commas,
@@ -119,22 +120,30 @@ def split_name_string(name_string):
     then return (first_name="Jane", last_name="Plain"). .
 
     If the word string has a comma, e.g. "Plain, Jane L.", then return (first_name="Jane", last_name="Plain").
+    This function also removes all occurrences of "Jr." in a name.
     """
+    name_string = name_string.replace(", Jr.", "")
+    name_string = name_string.replace(" Jr.", " ")
     first_name = None
     last_name = None
-    no_comma = ',' not in name_string
+
+    has_comma = ',' in name_string
     words = name_string.split()
-    if no_comma and len(words) == 2 :
-        first_name = words[0]
-        last_name = words[1]
-    elif no_comma and len(words) == 3:
-        first_name = words[0]
-        last_name = words[2]
-    elif not no_comma:
+    org_name_indicators = ['Team', 'Facility', 'Center', 'Community', 'Laboratory',
+                           'Group', 'Program', 'Division', 'Section', 'System']
+    is_organization = any([org_name in words for org_name in org_name_indicators])
+    if is_organization:
+        last_name = name_string
+    elif has_comma:
         string_parts = name_string.split(',')
         last_name = string_parts[0].strip()
         # Take just the first part of what follows the comma.
         first_name = string_parts[1].split()[0]
+    elif len(words) >= 2 :
+        first_name = words[0]
+        last_name = words[-1]
+    else:
+        last_name = name_string
     return first_name, last_name
 
 PERSONS_XML_FEED = None
@@ -173,9 +182,9 @@ def get_pure_author_id(author):
             personElement = matchingOrcidElements[0].getparent()
             person_id = personElement.get("id")
             return person_id, orcid_id
-        else:
-            # Library wants ORCID-to-dataset mappings for all available ORCID ids
-            return None, orcid_id
+        #else:
+        #    # Library wants ORCID-to-dataset mappings for all available ORCID ids
+        #    return None, orcid_id
 
     # Try name matching if ORCID matching fails.
     first_name, last_name = split_name_string(author['name'])
