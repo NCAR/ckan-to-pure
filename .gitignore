@@ -15,6 +15,7 @@
 # Test output files and temporary files
 *.xml
 *.txt
+*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

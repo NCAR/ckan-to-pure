@@ -6,7 +6,7 @@ import pathlib
 import re
 
 from lxml import etree
-from pure_parse import populate_workday_mapping, get_pure_author_id, split_name_string
+from pure_parse import get_pure_author_id, split_name_string, get_organization_id
 
 PURE_NS = "v1.dataset.pure.atira.dk"
 PURE = "{%s}" % PURE_NS
@@ -14,9 +14,6 @@ PURE = "{%s}" % PURE_NS
 PURE_CMNS = "v3.commons.pure.atira.dk"
 CMNS = "{%s}" % PURE_CMNS
 
-
-# Organization IDs get populated with Pure API queries
-WORKDAY_ORG_MAPPING = {}
 
 # Publishers are hard-coded strings
 PUBLISHER_MAPPING = {
@@ -32,24 +29,6 @@ PUBLISHER_MAPPING = {
     'UCP': "ucarncar-publisher-ucp",
     'NCAR': "ucarncar-publisher-ncar",  # Always place at the end of this list
 }
-
-
-def get_organization_id(org_string):
-    """
-    Given a string representing an NCAR organization, find the first mapping entry with a partial match and
-    return the associated UUID from Workday.   If there is no partial match, return None.
-
-    The partial string match test is case-sensitive.
-    """
-    global WORKDAY_ORG_MAPPING
-    if not WORKDAY_ORG_MAPPING:
-        WORKDAY_ORG_MAPPING = populate_workday_mapping()
-    workday_id = None
-    for key, value in WORKDAY_ORG_MAPPING.items():
-        if key in org_string:
-            workday_id = value
-            break
-    return workday_id
 
 
 def get_publisher_string(org_string):

@@ -2,6 +2,7 @@ import urllib.request
 import urllib.error
 from lxml import etree as ET
 import os
+import yaml
 
 from lxml.etree import XPathEvalError
 
@@ -107,6 +108,50 @@ def populate_workday_mapping():
     return mapping
 
 
+# Organization IDs get populated with Pure API queries
+WORKDAY_ORG_MAPPING = {}
+def get_organization_id(org_string):
+    """
+    Given a string representing an NCAR organization, find the first mapping entry with a partial match and
+    return the associated UUID from Workday.   If there is no partial match, return None.
+
+    The partial string match test is case-sensitive.
+    """
+    global WORKDAY_ORG_MAPPING
+    if not WORKDAY_ORG_MAPPING:
+        WORKDAY_ORG_MAPPING = populate_workday_mapping()
+    workday_id = None
+    for key, value in WORKDAY_ORG_MAPPING.items():
+        if key in org_string:
+            workday_id = value
+            break
+    return workday_id
+
+
+ORG_AUTHORS = None
+ORG_AUTHOR_IDS = None
+def get_author_organization_id(org_author_string):
+    """
+    Load YAML data with NCAR author teams, their mapped NCAR Lab, and
+    Lab author IDs.
+
+    Return the NCAR Lab Id if the team name is found.
+    """
+    org_author_id = None
+    global ORG_AUTHORS
+    if ORG_AUTHORS is None:
+        with open('author_orgs.yaml', 'r') as file:
+            ORG_AUTHORS = yaml.safe_load(file)
+    global ORG_AUTHOR_IDS
+    if ORG_AUTHOR_IDS is None:
+        with open('author_org_ids.yaml', 'r') as file:
+            ORG_AUTHOR_IDS = yaml.safe_load(file)
+    for org in ORG_AUTHORS:
+        if org_author_string in ORG_AUTHORS[org]:
+            org_author_id = str(ORG_AUTHOR_IDS[org])
+    return org_author_id
+
+
 def is_middle_initial(word_string):
     is_mi = len(word_string) == 2 and word_string[-1] == '.'
     return is_mi
@@ -146,13 +191,14 @@ def split_name_string(name_string):
         last_name = name_string
     return first_name, last_name
 
+
 PERSONS_XML_FEED = None
 
 def get_pure_author_id(author):
     """Given a list of author dictionaries with the fields 'name' and 'orcid', find the Workday IDs
        using the PURE API.   Also return the ORCID id, or None if it is not found.
     """
-    person_id = None
+    author_id = None
     orcid_id = None
     orcid_xpath = ".//d:person/d:orcId"
 
@@ -174,19 +220,25 @@ def get_pure_author_id(author):
                 file.write(persons_text)
         PERSONS_XML_FEED = getXMLTree(PERSONS_XML_FEED)
 
+    # First, check if there is an ORCID and it's in Workday
     if author['orcid_url'] and 'orcid' in author['orcid_url']:
         orcid_id = author['orcid_url'].split('/')[-1]
         xpath = f"{orcid_xpath}[text()=\"{orcid_id}\"]"
         matchingOrcidElements = PERSONS_XML_FEED.xpath(xpath, namespaces=PERSON_NAMESPACES)
         if matchingOrcidElements:
             personElement = matchingOrcidElements[0].getparent()
-            person_id = personElement.get("id")
-            return person_id, orcid_id
+            author_id = personElement.get("id")
+            return author_id, orcid_id
         #else:
         #    # Library wants ORCID-to-dataset mappings for all available ORCID ids
         #    return None, orcid_id
 
-    # Try name matching if ORCID matching fails.
+    # If author is an NCAR team, return the associated Lab ID.
+    author_id = get_author_organization_id(author['name'])
+    if author_id:
+        return author_id, orcid_id
+
+    # Try name matching if ORCID matching and organization author search fails.
     first_name, last_name = split_name_string(author['name'])
     name_xpath = f".//d:person/d:name[cmns:firstname=\"{first_name}\"][cmns:lastname=\"{last_name}\"]"
     try:
@@ -194,10 +246,8 @@ def get_pure_author_id(author):
     except XPathEvalError as e:
         print(f"XPathEvalError: {e.reason}")
         raise
-
-
     if matchingNameElements:
         personElement = matchingNameElements[0].getparent()
-        person_id = personElement.get("id")
+        author_id = personElement.get("id")
 
-    return person_id, orcid_id
+    return author_id, orcid_id
