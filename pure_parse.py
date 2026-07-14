@@ -174,7 +174,7 @@ def split_name_string(name_string):
 
     has_comma = ',' in name_string
     words = name_string.split()
-    org_name_indicators = ['Team', 'Facility', 'Center', 'Community', 'Laboratory',
+    org_name_indicators = ['Team', 'Facility', 'Center', 'Community', 'Laboratory', 'Centre', 'Office',
                            'Group', 'Program', 'Division', 'Section', 'System']
     is_organization = any([org_name in words for org_name in org_name_indicators])
     if is_organization:
