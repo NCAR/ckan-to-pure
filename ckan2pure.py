@@ -1,6 +1,8 @@
 import argparse
 import sys
 from urllib.request import urlopen
+from urllib.error import URLError, HTTPError
+import socket
 import json
 import time
 import csv
@@ -47,6 +49,24 @@ class PrintHelpOnErrorParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+def fetch_url(url, retries=5, timeout=60, backoff=2):
+    """Return the response body for url, retrying on timeouts and transient errors."""
+    for attempt in range(1, retries + 1):
+        try:
+            with urlopen(url, timeout=timeout) as resp:
+                return resp.read()
+        except HTTPError as e:
+            # Don't retry client errors like 404; do retry 5xx and 429
+            if e.code < 500 and e.code != 429:
+                raise
+            err = e
+        except (URLError, socket.timeout, ConnectionError, TimeoutError) as e:
+            err = e
+        if attempt == retries:
+            raise err
+        wait = backoff ** attempt
+        print_stderr(f"Request failed ({err}); retry {attempt}/{retries - 1} in {wait}s")
+        time.sleep(wait)
 #
 #  Parse the command line options.
 #
@@ -88,9 +108,7 @@ if ORCID_DOI_MAP:
 
 # URL for getting the list of package names
 package_search_query = CKAN_URL + '/api/3/action/package_search?fq=resource-type:dataset'
-
-with urlopen(package_search_query) as url:
-    response = url.read()
+response = fetch_url(package_search_query)
 
 json_data = json.loads(response.decode('utf-8'))
 
@@ -110,8 +128,8 @@ root = xml_init(USE_NAMESPACES)
 
 while start < num_datasets:
     query = package_search_query + f'&start={start}&rows={max_rows}'
-    with urlopen(query) as url:
-        response = url.read()
+    response = fetch_url(query)
+    print_stderr(f"   start == {start}")
     json_data = json.loads(response.decode('utf-8'))
     datasets = json_data['result']['results']  # extract all the packages from the response
     for pkg_dict in datasets:
