@@ -3,9 +3,13 @@ import urllib.error
 from lxml import etree as ET
 import os
 import yaml
+import sys
+import re
 
 from lxml.etree import XPathEvalError
 
+def print_stderr(msg):
+    print(msg, file=sys.stderr)
 
 def urlopen_with_basic_auth(url, username, password):
     """
@@ -173,18 +177,28 @@ def split_name_string(name_string):
     last_name = None
 
     has_comma = ',' in name_string
-    words = name_string.split()
-    org_name_indicators = ['Team', 'Facility', 'Center', 'Community', 'Laboratory', 'Centre', 'Office',
-                           'Group', 'Program', 'Division', 'Section', 'System']
-    is_organization = any([org_name in words for org_name in org_name_indicators])
+    words = re.split(r'[(), ]', name_string)
+    words_lower = [word.lower() for word in words]
+    org_name_indicators = ['team', 'facility', 'center', 'centre', 'centro', 'zentrum','community', 'office',
+                           'group', 'program', 'division', 'section', 'system', 'bureau', 'observatory', 'networks',
+                           'department', 'national', 'service', 'agency', 'agence', 'administration', 'international',
+                           'district', 'systems', 'research', 'council', 'organisation', 'organization', 'global',
+                           'commission', 'institute', 'instituto', 'institut', 'climate', 'datenzentrum', 'programme',
+                           'laboratory', 'laboratories', 'laboratoire', 'survey', 'management', 'unisys', 'exponent',
+                           'ministry', 'corporation', 'university', 'universidad', 'station', 'board', 'coast']
+    is_organization = any([org_name in words_lower for org_name in org_name_indicators])
     if is_organization:
         last_name = name_string
     elif has_comma:
+        if len(words) > 4:
+            print_stderr(f"LONG NAME: {name_string}")
         string_parts = name_string.split(',')
         last_name = string_parts[0].strip()
-        # Take just the first part of what follows the comma.
+        # Take just the first part of what follows the comma, to avoid including middle name.
         first_name = string_parts[1].split()[0]
     elif len(words) >= 2 :
+        if len(words) > 4:
+            print_stderr(f"LONG NAME: {name_string}")
         first_name = words[0]
         last_name = words[-1]
     else:
