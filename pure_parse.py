@@ -1,5 +1,6 @@
 import urllib.request
 import urllib.error
+
 from lxml import etree as ET
 import os
 import yaml
@@ -134,7 +135,7 @@ def get_organization_id(org_string):
 
 ORG_AUTHORS = None
 ORG_AUTHOR_IDS = None
-def get_author_organization_id(org_author_string):
+def get_author_organization_id(org_author_string, pure_staging=False):
     """
     Load YAML data with NCAR author teams, their mapped NCAR Lab, and
     Lab author IDs.
@@ -146,10 +147,16 @@ def get_author_organization_id(org_author_string):
     if ORG_AUTHORS is None:
         with open('author_orgs.yaml', 'r') as file:
             ORG_AUTHORS = yaml.safe_load(file)
+
     global ORG_AUTHOR_IDS
     if ORG_AUTHOR_IDS is None:
         with open('author_org_ids.yaml', 'r') as file:
             ORG_AUTHOR_IDS = yaml.safe_load(file)
+        if pure_staging:
+            ORG_AUTHOR_IDS = ORG_AUTHOR_IDS['staging']
+        else:
+            ORG_AUTHOR_IDS = ORG_AUTHOR_IDS['production']
+
     for org in ORG_AUTHORS:
         if org_author_string in ORG_AUTHORS[org]:
             org_author_id = str(ORG_AUTHOR_IDS[org])
@@ -160,6 +167,30 @@ def is_middle_initial(word_string):
     is_mi = len(word_string) == 2 and word_string[-1] == '.'
     return is_mi
 
+def is_organization(author):
+    """
+    This function checks if any words in the author name match organization
+    names.
+    """
+    org_name_indicators = ['team', 'facility', 'center', 'centre', 'centro', 'zentrum', 'community', 'office',
+                           'group', 'program', 'division', 'section', 'system', 'bureau', 'observatory', 'networks',
+                           'department', 'national', 'service', 'agency', 'agence', 'administration', 'international',
+                           'district', 'systems', 'research', 'council', 'organisation', 'organization', 'global',
+                           'commission', 'institute', 'instituto', 'institut', 'climate', 'datenzentrum', 'programme',
+                           'laboratory', 'laboratories', 'laboratoire', 'survey', 'management', 'unisys', 'exponent',
+                           'ministry', 'corporation', 'university', 'universidad', 'station', 'board', 'states']
+    name_string = author['name']
+    # Check to see if org name matches an NCAR organization or has a ROR
+    org_id = get_author_organization_id(name_string)
+    if org_id:
+        is_organization = False
+    elif author['ror_url']:
+        is_organization = True
+    else:
+        words = re.split(r'[(), ]', name_string)
+        words_lower = [word.lower() for word in words]
+        is_organization = any([org_name in words_lower for org_name in org_name_indicators])
+    return is_organization
 
 def split_name_string(name_string):
     """
@@ -171,25 +202,12 @@ def split_name_string(name_string):
     If the word string has a comma, e.g. "Plain, Jane L.", then return (first_name="Jane", last_name="Plain").
     This function also removes all occurrences of "Jr." in a name.
     """
+    first_name = None
     name_string = name_string.replace(", Jr.", "")
     name_string = name_string.replace(" Jr.", " ")
-    first_name = None
-    last_name = None
-
     has_comma = ',' in name_string
     words = re.split(r'[(), ]', name_string)
-    words_lower = [word.lower() for word in words]
-    org_name_indicators = ['team', 'facility', 'center', 'centre', 'centro', 'zentrum','community', 'office',
-                           'group', 'program', 'division', 'section', 'system', 'bureau', 'observatory', 'networks',
-                           'department', 'national', 'service', 'agency', 'agence', 'administration', 'international',
-                           'district', 'systems', 'research', 'council', 'organisation', 'organization', 'global',
-                           'commission', 'institute', 'instituto', 'institut', 'climate', 'datenzentrum', 'programme',
-                           'laboratory', 'laboratories', 'laboratoire', 'survey', 'management', 'unisys', 'exponent',
-                           'ministry', 'corporation', 'university', 'universidad', 'station', 'board', 'coast']
-    is_organization = any([org_name in words_lower for org_name in org_name_indicators])
-    if is_organization:
-        last_name = name_string
-    elif has_comma:
+    if has_comma:
         if len(words) > 4:
             print_stderr(f"LONG NAME: {name_string}")
         string_parts = name_string.split(',')
@@ -208,7 +226,7 @@ def split_name_string(name_string):
 
 PERSONS_XML_FEED = None
 
-def get_pure_author_id(author):
+def get_pure_author_id(author, pure_staging):
     """Given a list of author dictionaries with the fields 'name' and 'orcid', find the Workday IDs
        using the PURE API.   Also return the ORCID id, or None if it is not found.
     """
@@ -248,7 +266,7 @@ def get_pure_author_id(author):
         #    return None, orcid_id
 
     # If author is an NCAR team, return the associated Lab ID.
-    author_id = get_author_organization_id(author['name'])
+    author_id = get_author_organization_id(author['name'], pure_staging)
     if author_id:
         return author_id, orcid_id
 

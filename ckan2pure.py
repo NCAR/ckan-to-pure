@@ -1,16 +1,13 @@
 import argparse
 import sys
-from urllib.request import urlopen
-from urllib.error import URLError, HTTPError
-import socket
 import json
 import time
 import csv
 
 from pure_parse import urlopen_with_basic_auth
-from utils import render_package, xml_init, write_xml, validate_xml, print_stderr
+from utils import render_package, xml_init, write_xml, validate_xml, print_stderr, fetch_url
 
-__version_info__ = ('2026', '04', '27')
+__version_info__ = ('2026', '10', '17')
 __version__ = '-'.join(__version_info__)
 
 PROGRAM_DESCRIPTION = '''
@@ -31,6 +28,7 @@ Optional arguments:
 
        --ckan-url         Base URL for CKAN repository; default is "https://data.ucar.edu"
        --test             Generate output for the first ten datasets only
+       --staging          Generate XML for Pure Staging Server
        --use-namespaces   Use qualified namespaces.  Should be selected if --validate is selected.
        --validate         Perform XSD schema validation on the XML output
        --add-extra        Add extra concepts from the Pure Schema to XML output
@@ -49,24 +47,6 @@ class PrintHelpOnErrorParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
-def fetch_url(url, retries=5, timeout=60, backoff=2):
-    """Return the response body for url, retrying on timeouts and transient errors."""
-    for attempt in range(1, retries + 1):
-        try:
-            with urlopen(url, timeout=timeout) as resp:
-                return resp.read()
-        except HTTPError as e:
-            # Don't retry client errors like 404; do retry 5xx and 429
-            if e.code < 500 and e.code != 429:
-                raise
-            err = e
-        except (URLError, socket.timeout, ConnectionError, TimeoutError) as e:
-            err = e
-        if attempt == retries:
-            raise err
-        wait = backoff ** attempt
-        print_stderr(f"Request failed ({err}); retry {attempt}/{retries - 1} in {wait}s")
-        time.sleep(wait)
 #
 #  Parse the command line options.
 #
@@ -83,6 +63,7 @@ parser.add_argument("--use-namespaces", help="Add qualified namespaces to elemen
 parser.add_argument("--validate", help="Perform XSD validation; use with --use-namespaces.",
                     action='store_const', const=True)
 parser.add_argument("--add-extra", help="Add extra Pure concepts", action='store_const', const=True)
+parser.add_argument("--staging", help="Produce Pure Staging Feed", action='store_const', const=True)
 parser.add_argument("--orcid-doi-map", help="Write CSV file with ORCIDs and DOIs", action='store_const', const=True)
 parser.add_argument('--version', action='version', version="%(prog)s (" + __version__ + ")")
 
@@ -94,6 +75,7 @@ USE_NAMESPACES = args.use_namespaces
 VALIDATE_XML = args.validate
 ADD_EXTRA_CONCEPTS = args.add_extra
 ORCID_DOI_MAP = args.orcid_doi_map
+PURE_STAGING= args.staging
 
 # Time the program's run length
 start_time = time.time()
@@ -139,7 +121,7 @@ while start < num_datasets:
         # json_data = json.loads(response.decode('utf-8'))
         # pkg_dict = json_data['result']
         print_stderr(pkg_dict['title'])
-        render_package(root, pkg_dict, csv_writer, ADD_EXTRA_CONCEPTS)
+        render_package(root, pkg_dict, csv_writer, ADD_EXTRA_CONCEPTS, PURE_STAGING)
     start = start + max_rows
 
 if ORCID_DOI_MAP:

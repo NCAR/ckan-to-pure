@@ -1,12 +1,16 @@
 import json
 import sys
+import html
+from urllib.request import urlopen
+from urllib.error import URLError, HTTPError
+import socket
 import time
 from datetime import datetime
 import pathlib
 import re
 
 from lxml import etree
-from pure_parse import get_pure_author_id, split_name_string, get_organization_id
+from pure_parse import get_pure_author_id, split_name_string, get_organization_id, is_organization
 
 PURE_NS = "v1.dataset.pure.atira.dk"
 PURE = "{%s}" % PURE_NS
@@ -30,6 +34,32 @@ PUBLISHER_MAPPING = {
     'NCAR': "ucarncar-publisher-ncar",  # Always place at the end of this list
 }
 
+def fetch_url(url, retries=5, timeout=60, backoff=2):
+    """Return the response body for url, retrying on timeouts and transient errors."""
+    for attempt in range(1, retries + 1):
+        try:
+            with urlopen(url, timeout=timeout) as resp:
+                return resp.read()
+        except HTTPError as e:
+            # Don't retry client errors like 404; do retry 5xx and 429
+            if e.code < 500 and e.code != 429:
+                raise
+            err = e
+        except (URLError, socket.timeout, ConnectionError, TimeoutError) as e:
+            err = e
+        if attempt == retries:
+            raise err
+        wait = backoff ** attempt
+        print_stderr(f"Request failed ({err}); retry {attempt}/{retries - 1} in {wait}s")
+        time.sleep(wait)
+
+def ror_org_name(ror_url):
+    ror_id = ror_url.rstrip("/").split("/")[-1]
+    #resp = requests.get(f"https://api.ror.org/v2/organizations/{ror_id}", timeout=10)
+    response = fetch_url(f"https://api.ror.org/v2/organizations/{ror_id}")
+    json_data = json.loads(response.decode('utf-8'))
+    names = json_data["names"]
+    return next(n["value"] for n in names if "ror_display" in n["types"])
 
 def get_publisher_string(org_string):
     """
@@ -56,6 +86,14 @@ def xml_init(use_namespaces):
         root_element = etree.Element(PURE + "datasets", nsmap={None: PURE_NS, 'v3': PURE_CMNS})
     return root_element
 
+def html_unescape(author_string):
+    """ Deal with possible HTML double-encodings by looping over unescape calls.
+    """
+    new_string = html.unescape(author_string)
+    while new_string != author_string:
+        author_string = new_string
+        new_string = html.unescape(author_string)
+    return author_string
 
 def write_xml(root, xml_header=None, output_file=None):
     content = etree.tostring(root, pretty_print=True, encoding='unicode')
@@ -141,7 +179,8 @@ def remove_html_tags(text):
     return re.sub(clean, '', text)
 
 
-def render_package(root, pkg_dict, csv_writer, add_extra_elements=False):
+def render_package(root, pkg_dict, csv_writer,
+                   add_extra_elements=False, pure_staging=False):
     """
     Render the metadata for a single dataset to the Pure XML feed.
     """
@@ -177,11 +216,12 @@ def render_package(root, pkg_dict, csv_writer, add_extra_elements=False):
 
     # Title
     title = etree.SubElement(dataset, PURE + 'title')
-    title.text = pkg_dict['title']
+    title.text = html_unescape(pkg_dict['title'])
 
     # Description
     description = etree.SubElement(dataset, PURE + 'description')
-    description.text = remove_html_tags(pkg_dict['notes'])
+    description_string = remove_html_tags(pkg_dict['notes'])
+    description.text = html_unescape(description_string)
 
     # Temporal Coverage:  Use only if it's defined
     if add_extra_elements:
@@ -215,12 +255,21 @@ def render_package(root, pkg_dict, csv_writer, add_extra_elements=False):
         print_stderr("#### No authors found, skipping...")
         return
     authors = json.loads(authors)
+    # Split authors into persons and organizations, and unescape HTML chars
+    author_orgs = []
+    author_people = []
+    for author in authors:
+        author['name'] = html_unescape(author['name'])
+        if is_organization(author):
+            author_orgs.append(author)
+        else:
+            author_people.append(author)
     persons = etree.SubElement(dataset, PURE + 'persons')
     author_index = 0
     found_ncar_author = False
-    for author in authors:
+    for author in author_people:
         author_index += 1
-        person_id, orcid_id = get_pure_author_id(author)
+        person_id, orcid_id = get_pure_author_id(author, pure_staging)
         if csv_writer and orcid_id:
             data = {'DOI': resource_url, 'dataset_id': dataset_id, 'ORCID': orcid_id, 'name':  author['name']}
             csv_writer.writerow(data)
@@ -250,6 +299,20 @@ def render_package(root, pkg_dict, csv_writer, add_extra_elements=False):
     if not found_ncar_author:
         print_stderr(f"Could not find a matching author for {pkg_dict['title']} with publisher(s) {publishers}, skipping...")
         return
+
+    # Add external organizations.
+    if author_orgs:
+        orgs = etree.SubElement(dataset, PURE + 'organisations')
+        for author in author_orgs:
+            # If organization has a ROR ID, fetch the canonical name from ror.org
+            if author['ror_url']:
+                organization_name = ror_org_name(author['ror_url'])
+            else:
+                organization_name = author['name']
+
+            org_inner = etree.SubElement(orgs, PURE + 'organisation', attrib={"origin": "external"})
+            last_name_element = etree.SubElement(org_inner, 'name')
+            last_name_element.text = organization_name
 
     org = etree.SubElement(dataset, PURE + 'managingOrganisation', attrib={'lookupId': publisher_id})
     org = etree.SubElement(dataset, PURE + 'publisher', attrib={'lookupId': publisher_string})
