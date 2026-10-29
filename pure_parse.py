@@ -152,14 +152,13 @@ def get_author_organization_id(org_author_string, pure_staging=False):
     if ORG_AUTHOR_IDS is None:
         with open('author_org_ids.yaml', 'r') as file:
             ORG_AUTHOR_IDS = yaml.safe_load(file)
-        if pure_staging:
-            ORG_AUTHOR_IDS = ORG_AUTHOR_IDS['staging']
-        else:
-            ORG_AUTHOR_IDS = ORG_AUTHOR_IDS['production']
 
     for org in ORG_AUTHORS:
         if org_author_string in ORG_AUTHORS[org]:
-            org_author_id = str(ORG_AUTHOR_IDS[org])
+            if pure_staging:
+                org_author_id = str(ORG_AUTHOR_IDS['staging'][org])
+            else:
+                org_author_id = str(ORG_AUTHOR_IDS['production'][org])
     return org_author_id
 
 
@@ -172,13 +171,14 @@ def is_organization(author):
     This function checks if any words in the author name match organization
     names.
     """
-    org_name_indicators = ['team', 'facility', 'center', 'centre', 'centro', 'zentrum', 'community', 'office',
+    org_name_indicators = ['team', 'facility', 'center', 'centre', 'centro', 'zentrum', 'community', 'office', 'project',
                            'group', 'program', 'division', 'section', 'system', 'bureau', 'observatory', 'networks',
-                           'department', 'national', 'service', 'agency', 'agence', 'administration', 'international',
+                           'department', 'national', 'service', 'servicio', 'agency', 'agence', 'administration',
                            'district', 'systems', 'research', 'council', 'organisation', 'organization', 'global',
                            'commission', 'institute', 'instituto', 'institut', 'climate', 'datenzentrum', 'programme',
                            'laboratory', 'laboratories', 'laboratoire', 'survey', 'management', 'unisys', 'exponent',
-                           'ministry', 'corporation', 'university', 'universidad', 'station', 'board', 'states']
+                           'ministry', 'corporation', 'university', 'universidad', 'station', 'board', 'states',
+                           'coast', 'international']
     name_string = author['name']
     # Check to see if org name matches an NCAR organization or has a ROR
     org_id = get_author_organization_id(name_string)
